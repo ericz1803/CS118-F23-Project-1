@@ -9,6 +9,8 @@
 #include <arpa/inet.h>
 #include <sys/socket.h>
 
+#include <regex.h>
+
 /**
  * Project 1 starter code
  * All parts needed to be changed/added are marked with TODO
@@ -142,17 +144,54 @@ void handle_request(struct server_app *app, int client_socket) {
     char *request = malloc(strlen(buffer) + 1);
     strcpy(request, buffer);
 
+    char *requested_path = malloc(strlen(buffer) + 1);
+    // extract requested path from header using regex between GET and HTTP/
+    char pattern[] = "GET[[:space:]]/(.*)[[:space:]]HTTP";
+    regex_t regex;
+    int rc = regcomp(&regex, pattern, REG_EXTENDED);
+
+    if (rc)
+        printf("Error compiling regex.\n");
+
+    regmatch_t matches[2];
+    int ret = regexec(&regex, request, 2, matches, 0);
+
+    if (!ret) {
+        int match_start = matches[1].rm_so;
+        int match_end = matches[1].rm_eo;
+        int match_length = match_end - match_start;
+
+        strncpy(requested_path, request + match_start, match_length);
+        requested_path[match_length] = '\0';
+        printf("Found match: %d %d\n", match_start, match_end);
+    }
+    else
+    {
+        printf("Error matching regex.\n");
+    }
+    
+    regfree(&regex);
+
+
+    printf("Received request:\n%s\n", request);
+    printf("Requested path:\n%s\n", requested_path);
+
     // TODO: Parse the header and extract essential fields, e.g. file name
     // Hint: if the requested path is "/" (root), default to index.html
-    char file_name[] = "index.html";
+    if (strcmp(requested_path, "") == 0)
+    {
+        requested_path = "index.html";
+    }
 
     // TODO: Implement proxy and call the function under condition
     // specified in the spec
     // if (need_proxy(...)) {
     //    proxy_remote_file(app, client_socket, file_name);
     // } else {
-    serve_local_file(client_socket, file_name);
+    serve_local_file(client_socket, requested_path);
     //}
+    // free(request);
+    // free(requested_path);
 }
 
 void serve_local_file(int client_socket, const char *path) {
@@ -166,6 +205,8 @@ void serve_local_file(int client_socket, const char *path) {
     // * Also send file content
     // (When the requested file does not exist):
     // * Generate a correct response
+
+    printf("Serving local file: %s\n\n", path);
 
     char response[] = "HTTP/1.0 200 OK\r\n"
                       "Content-Type: text/plain; charset=UTF-8\r\n"
