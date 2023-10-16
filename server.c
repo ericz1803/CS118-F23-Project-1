@@ -163,7 +163,6 @@ void handle_request(struct server_app *app, int client_socket) {
 
         strncpy(requested_path, request + match_start, match_length);
         requested_path[match_length] = '\0';
-        printf("Found match: %d %d\n", match_start, match_end);
     }
     else
     {
@@ -177,7 +176,7 @@ void handle_request(struct server_app *app, int client_socket) {
     printf("Requested path:\n%s\n", requested_path);
 
     // TODO: Parse the header and extract essential fields, e.g. file name
-    // Hint: if the requested path is "/" (root), default to index.html
+    // if the requested path is "/" (root), default to index.html ("" in this case bc we are removing the /)
     if (strcmp(requested_path, "") == 0)
     {
         requested_path = "index.html";
@@ -190,8 +189,33 @@ void handle_request(struct server_app *app, int client_socket) {
     // } else {
     serve_local_file(client_socket, requested_path);
     //}
-    // free(request);
-    // free(requested_path);
+}
+
+char *get_mime_type(const char *file_name) {
+    //find . in file name and get the extension
+    char *extension = strrchr(file_name, '.');
+    printf("Extension: %s\n", extension);
+
+    if (extension == NULL) // no file extension so assume binary
+    {
+        return "application/octet-stream";
+    } 
+    else if (strcmp(extension, ".txt") == 0) // plain text
+    {
+        return "text/plain; charset=UTF-8";
+    } 
+    else if (strcmp(extension, ".html") == 0) // html
+    {
+        return "text/html; charset=UTF-8";
+    }
+    else if (strcmp(extension, ".jpg") == 0) // jpg
+    {
+        return "image/jpeg";
+    }
+    else // default to binary if extension is unknown
+    {
+        return "application/octet-stream";
+    }
 }
 
 void serve_local_file(int client_socket, const char *path) {
@@ -206,15 +230,46 @@ void serve_local_file(int client_socket, const char *path) {
     // (When the requested file does not exist):
     // * Generate a correct response
 
-    printf("Serving local file: %s\n\n", path);
+    printf("Serving local file: %s\n", path);
 
-    char response[] = "HTTP/1.0 200 OK\r\n"
-                      "Content-Type: text/plain; charset=UTF-8\r\n"
-                      "Content-Length: 15\r\n"
-                      "\r\n"
-                      "Sample response";
+    // put contents of file in a buffer to send
+    char* buffer;
+    long length;
+    FILE* file = fopen(path, "r");
 
-    send(client_socket, response, strlen(response), 0);
+    if (!file)
+    {
+        char response[] = "HTTP/1.0 404 Not Found\r\n\r\n";
+        send(client_socket, response, strlen(response), 0);
+        printf("404: File not found.\n\n");
+        return;
+    }
+
+    fseek(file, 0, SEEK_END);
+    length = ftell(file);
+    fseek(file, 0, SEEK_SET);
+    buffer = malloc(length + 1);
+
+    if (buffer)
+    {
+        fread(buffer, 1, length, file);
+    }
+    fclose(file);
+
+
+    // build response header 
+    char* response_header;
+    char* mime_type = get_mime_type(path);
+
+    asprintf(&response_header, "HTTP/1.0 200 OK\r\n"
+                        "Content-Type: %s\r\n"
+                        "Content-Length: %ld\r\n"
+                        "\r\n", mime_type, length);
+
+
+    printf("Response:%lu\n%s\n\n", strlen(response_header), response_header);
+    send(client_socket, response_header, strlen(response_header), 0);
+    send(client_socket, buffer, length, 0);
 }
 
 void proxy_remote_file(struct server_app *app, int client_socket, const char *request) {
