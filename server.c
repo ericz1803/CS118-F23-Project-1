@@ -156,7 +156,8 @@ void handle_request(struct server_app *app, int client_socket) {
     regmatch_t matches[2];
     int ret = regexec(&regex, request, 2, matches, 0);
 
-    if (!ret) {
+    if (!ret) 
+    {
         int match_start = matches[1].rm_so;
         int match_end = matches[1].rm_eo;
         int match_length = match_end - match_start;
@@ -218,7 +219,41 @@ char *get_mime_type(const char *file_name) {
     }
 }
 
-void serve_local_file(int client_socket, const char *path) {
+
+// from https://stackoverflow.com/questions/2673207/c-c-url-decode-library
+void decode_url(const char *input_path, char *output_path) { // convert %20 and + -> space and %25 -> %
+    char a, b;
+    while (*input_path)
+    {
+        if ((*input_path == '%') &&
+            ((a = input_path[1]) && (b = input_path[2])))
+        {
+            if (a >= 'a')
+                    a -= 'a'-'A';
+            if (a >= 'A')
+                    a -= ('A' - 10);
+            else
+                    a -= '0';
+            if (b >= 'a')
+                    b -= 'a'-'A';
+            if (b >= 'A')
+                    b -= ('A' - 10);
+            else
+                    b -= '0';
+            *output_path++ = 16*a+b;
+            input_path += 3;
+        }
+        else if (*input_path == '+') {
+            *output_path++ = ' ';
+            input_path++;
+        } else {
+            *output_path++ = *input_path++;
+        }
+    }
+    *output_path++ = '\0';
+}
+
+void serve_local_file(int client_socket, const char *url_path) {
     // TODO: Properly implement serving of local files
     // The following code returns a dummy response for all requests
     // but it should give you a rough idea about what a proper response looks like
@@ -229,6 +264,8 @@ void serve_local_file(int client_socket, const char *path) {
     // * Also send file content
     // (When the requested file does not exist):
     // * Generate a correct response
+    char* path = malloc(strlen(url_path) + 1);
+    decode_url(url_path, path);
 
     printf("Serving local file: %s\n", path);
 
